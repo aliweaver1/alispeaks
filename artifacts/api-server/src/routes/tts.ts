@@ -9,137 +9,12 @@ import {
 
 const router: IRouter = Router();
 
-const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 const ELEVENLABS_BASE_URL = "https://api.elevenlabs.io";
+const MODEL_ID = "eleven_multilingual_v2";
 
-const VOICES = [
-  {
-    id: "21m00Tcm4TlvDq8ikWAM",
-    name: "Rachel",
-    category: "premade",
-    description: "Calm, young American female",
-    labels: { accent: "american", age: "young", gender: "female", use_case: "narration" },
-  },
-  {
-    id: "EXAVITQu4vr4xnSDxMaL",
-    name: "Sarah",
-    category: "premade",
-    description: "Soft, young American female",
-    labels: { accent: "american", age: "young", gender: "female", use_case: "news" },
-  },
-  {
-    id: "TX3LPaxmHKxFdv7VOQHJ",
-    name: "Liam",
-    category: "premade",
-    description: "Articulate, young American male",
-    labels: { accent: "american", age: "young", gender: "male", use_case: "narration" },
-  },
-  {
-    id: "XrExE9yKIg1WjnnlVkGX",
-    name: "Matilda",
-    category: "premade",
-    description: "Warm, young American female",
-    labels: { accent: "american", age: "young", gender: "female", use_case: "audiobook" },
-  },
-  {
-    id: "pNInz6obpgDQGcFmaJgB",
-    name: "Adam",
-    category: "premade",
-    description: "Deep, middle-aged American male",
-    labels: { accent: "american", age: "middle aged", gender: "male", use_case: "narration" },
-  },
-  {
-    id: "onwK4e9ZLuTAKqWW03F9",
-    name: "Daniel",
-    category: "premade",
-    description: "Deep, middle-aged British male",
-    labels: { accent: "british", age: "middle aged", gender: "male", use_case: "news" },
-  },
-  {
-    id: "IKne3meq5aSn9XLyUdCD",
-    name: "Charlie",
-    category: "premade",
-    description: "Casual, middle-aged Australian male",
-    labels: { accent: "australian", age: "middle aged", gender: "male", use_case: "conversational" },
-  },
-  {
-    id: "XB0fDUnXU5powFXDhCwa",
-    name: "Charlotte",
-    category: "premade",
-    description: "Seductive, young Swedish female",
-    labels: { accent: "swedish", age: "young", gender: "female", use_case: "video games" },
-  },
-  {
-    id: "GBv7mTt0atIp3Br8iCZE",
-    name: "Thomas",
-    category: "premade",
-    description: "Calm, young American male",
-    labels: { accent: "american", age: "young", gender: "male", use_case: "meditation" },
-  },
-  {
-    id: "AZnzlk1XvdvUeBnXmlld",
-    name: "Domi",
-    category: "premade",
-    description: "Strong, young American female",
-    labels: { accent: "american", age: "young", gender: "female", use_case: "narration" },
-  },
-  {
-    id: "JBFqnCBsd6RMkjVDRZzb",
-    name: "George",
-    category: "premade",
-    description: "Raspy, middle-aged British male",
-    labels: { accent: "british", age: "middle aged", gender: "male", use_case: "narration" },
-  },
-  {
-    id: "jsCqWAovK2LkecY7zXl4",
-    name: "Freya",
-    category: "premade",
-    description: "Overly positive, young American female",
-    labels: { accent: "american", age: "young", gender: "female", use_case: "video games" },
-  },
-  {
-    id: "D38z5RcWu1voky8WS1ja",
-    name: "Fin",
-    category: "premade",
-    description: "Sailor, old Irish male",
-    labels: { accent: "irish", age: "old", gender: "male", use_case: "video games" },
-  },
-  {
-    id: "flq6f7yd4MFEOuihkFlD",
-    name: "Michael",
-    category: "premade",
-    description: "Orotund, old American male",
-    labels: { accent: "american", age: "old", gender: "male", use_case: "audiobook" },
-  },
-  {
-    id: "oWAxZDx7w5VEj9dCyTzz",
-    name: "Grace",
-    category: "premade",
-    description: "Gentle, young American female",
-    labels: { accent: "american-southern", age: "young", gender: "female", use_case: "audiobook" },
-  },
-  {
-    id: "29vD33N1CtxCmqQRPOHJ",
-    name: "Drew",
-    category: "premade",
-    description: "Well-rounded, middle-aged American male",
-    labels: { accent: "american", age: "middle aged", gender: "male", use_case: "news" },
-  },
-  {
-    id: "CYw3kZ28EB7dI0rQBVoT",
-    name: "Dave",
-    category: "premade",
-    description: "Conversational, young British-Essex male",
-    labels: { accent: "british-essex", age: "young", gender: "male", use_case: "conversational" },
-  },
-  {
-    id: "MF3mGyEYCl7XYWbV9V6O",
-    name: "Elli",
-    category: "premade",
-    description: "Emotional, young American female",
-    labels: { accent: "american", age: "young", gender: "female", use_case: "narration" },
-  },
-];
+function getApiKey(): string | undefined {
+  return process.env.ELEVENLABS_API_KEY;
+}
 
 interface HistoryEntry {
   id: string;
@@ -153,15 +28,60 @@ interface HistoryEntry {
 
 const historyStore: HistoryEntry[] = [];
 const MAX_HISTORY = 20;
+const voiceNameCache = new Map<string, string>();
 
-router.get("/voices", (_req, res): void => {
-  res.json(ListVoicesResponse.parse(VOICES));
+router.get("/voices", async (req, res): Promise<void> => {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    res.status(500).json({ error: "ELEVENLABS_API_KEY is not configured." });
+    return;
+  }
+
+  const response = await fetch(`${ELEVENLABS_BASE_URL}/v1/voices`, {
+    headers: { "xi-api-key": apiKey },
+  });
+
+  if (!response.ok) {
+    req.log.error({ status: response.status }, "Failed to fetch voices from ElevenLabs");
+    res.status(502).json({ error: "Failed to fetch voices from ElevenLabs" });
+    return;
+  }
+
+  const data = (await response.json()) as {
+    voices: Array<{
+      voice_id: string;
+      name: string;
+      category: string;
+      description?: string;
+      labels?: Record<string, string>;
+    }>;
+  };
+
+  const voices = data.voices.map((v) => ({
+    id: v.voice_id,
+    name: v.name,
+    category: v.category ?? "premade",
+    description: v.description ?? null,
+    labels: v.labels ?? {},
+  }));
+
+  for (const v of voices) {
+    voiceNameCache.set(v.id, v.name);
+  }
+
+  res.json(ListVoicesResponse.parse(voices));
 });
 
 router.post("/tts", async (req, res): Promise<void> => {
   const parsed = GenerateSpeechBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    res.status(500).json({ error: "ELEVENLABS_API_KEY is not configured." });
     return;
   }
 
@@ -174,26 +94,18 @@ router.post("/tts", async (req, res): Promise<void> => {
     use_speaker_boost = true,
   } = parsed.data;
 
-  if (!ELEVENLABS_API_KEY) {
-    res.status(500).json({
-      error:
-        "ELEVENLABS_API_KEY environment variable is not set. Please connect your ElevenLabs account.",
-    });
-    return;
-  }
-
   const elevenLabsUrl = `${ELEVENLABS_BASE_URL}/v1/text-to-speech/${voice_id}`;
 
   const response = await fetch(elevenLabsUrl, {
     method: "POST",
     headers: {
-      "xi-api-key": ELEVENLABS_API_KEY,
+      "xi-api-key": apiKey,
       "Content-Type": "application/json",
       Accept: "audio/mpeg",
     },
     body: JSON.stringify({
       text,
-      model_id: "eleven_turbo_v2_5",
+      model_id: MODEL_ID,
       voice_settings: {
         stability,
         similarity_boost,
@@ -204,14 +116,15 @@ router.post("/tts", async (req, res): Promise<void> => {
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    req.log.error(
-      { status: response.status, error: errorText },
-      "ElevenLabs API error"
-    );
-    res.status(response.status).json({
-      error: `ElevenLabs API error: ${response.statusText}`,
-    });
+    let errorMessage = response.statusText;
+    try {
+      const errBody = (await response.json()) as { detail?: { message?: string } };
+      if (errBody?.detail?.message) errorMessage = errBody.detail.message;
+    } catch {
+      // ignore parse error
+    }
+    req.log.error({ status: response.status, error: errorMessage }, "ElevenLabs TTS error");
+    res.status(response.status).json({ error: errorMessage });
     return;
   }
 
@@ -219,12 +132,11 @@ router.post("/tts", async (req, res): Promise<void> => {
   const audio_base64 = Buffer.from(audioBuffer).toString("base64");
   const content_type = response.headers.get("content-type") ?? "audio/mpeg";
 
-  const voice = VOICES.find((v) => v.id === voice_id);
   const entry: HistoryEntry = {
     id: randomUUID(),
     text,
     voice_id,
-    voice_name: voice?.name ?? voice_id,
+    voice_name: voiceNameCache.get(voice_id) ?? voice_id,
     audio_base64,
     created_at: new Date().toISOString(),
     character_count: text.length,
@@ -235,21 +147,17 @@ router.post("/tts", async (req, res): Promise<void> => {
     historyStore.splice(MAX_HISTORY);
   }
 
-  const result = GenerateSpeechResponse.parse({
-    audio_base64,
-    content_type,
-    character_count: text.length,
-  });
-
-  res.json(result);
+  res.json(
+    GenerateSpeechResponse.parse({
+      audio_base64,
+      content_type,
+      character_count: text.length,
+    })
+  );
 });
 
 router.get("/history", (_req, res): void => {
-  const history = historyStore.map((item) => ({
-    ...item,
-    audio_base64: item.audio_base64,
-  }));
-  res.json(GetHistoryResponse.parse(history));
+  res.json(GetHistoryResponse.parse(historyStore));
 });
 
 export default router;
