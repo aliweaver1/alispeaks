@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Text to Speech"
+version = "1.0.0"
+id = "artifacts/tts-app"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24701
+
+[services.development]
+run = "pnpm --filter @workspace/tts-app run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/tts-app", "run", "build" ]
+publicDir = "artifacts/tts-app/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24701"
+BASE_PATH = "/"

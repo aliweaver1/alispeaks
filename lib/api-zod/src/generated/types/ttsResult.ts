@@ -6,6 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface HealthStatus {
-  status: string;
+export interface TtsResult {
+  audio_base64: string;
+  content_type: string;
+  character_count: number;
 }

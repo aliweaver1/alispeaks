@@ -3,13 +3,15 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Text to Speech API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: tts
+    description: Text to speech operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,67 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /voices:
+    get:
+      operationId: listVoices
+      tags: [tts]
+      summary: List available voices
+      description: Returns all available TTS voices
+      responses:
+        "200":
+          description: List of voices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Voice"
+  /tts:
+    post:
+      operationId: generateSpeech
+      tags: [tts]
+      summary: Generate speech from text
+      description: Converts text to speech using a selected voice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TtsInput"
+      responses:
+        "200":
+          description: Generated audio as base64
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TtsResult"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /history:
+    get:
+      operationId: getHistory
+      tags: [tts]
+      summary: Get generation history
+      description: Returns past TTS generations for this session
+      responses:
+        "200":
+          description: List of history items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HistoryItem"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +96,78 @@ components:
           type: string
       required:
         - status
-
+    Voice:
+      type: object
+      required: [id, name, category]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+        description:
+          type: ["string", "null"]
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+    TtsInput:
+      type: object
+      required: [text, voice_id]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 5000
+        voice_id:
+          type: string
+        stability:
+          type: number
+          minimum: 0
+          maximum: 1
+        similarity_boost:
+          type: number
+          minimum: 0
+          maximum: 1
+        style:
+          type: number
+          minimum: 0
+          maximum: 1
+        use_speaker_boost:
+          type: boolean
+    TtsResult:
+      type: object
+      required: [audio_base64, content_type, character_count]
+      properties:
+        audio_base64:
+          type: string
+        content_type:
+          type: string
+        character_count:
+          type: integer
+    HistoryItem:
+      type: object
+      required: [id, text, voice_id, voice_name, created_at, character_count]
+      properties:
+        id:
+          type: string
+        text:
+          type: string
+        voice_id:
+          type: string
+        voice_name:
+          type: string
+        audio_base64:
+          type: ["string", "null"]
+        created_at:
+          type: string
+          format: date-time
+        character_count:
+          type: integer
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
