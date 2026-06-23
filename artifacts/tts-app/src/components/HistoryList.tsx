@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import { HistoryItem } from "@workspace/api-client-react/src/generated/api.schemas";
+import type { HistoryItem } from "@workspace/api-client-react";
 import { AudioPlayer } from "./AudioPlayer";
 
 interface HistoryListProps {

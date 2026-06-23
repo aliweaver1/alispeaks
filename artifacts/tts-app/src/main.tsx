@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
-import { setBaseUrl } from "@workspace/api-client-react";
+import { setBaseUrl, setAuthTokenGetter } from "@workspace/api-client-react";
+import { supabase } from "@/lib/supabase";
 import App from "./App";
 import "./index.css";
 
@@ -9,5 +10,11 @@ import "./index.css";
 if (import.meta.env.VITE_API_BASE_URL) {
   setBaseUrl(import.meta.env.VITE_API_BASE_URL as string);
 }
+
+// Configure auth token getter to supply the Supabase session token
+setAuthTokenGetter(async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token ?? null;
+});
 
 createRoot(document.getElementById("root")!).render(<App />);

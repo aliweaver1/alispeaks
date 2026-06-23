@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
-import { Play, Settings2, SlidersHorizontal, Info, Mic } from "lucide-react";
-import { useListVoices, useGenerateSpeech, useGetHistory, getGetHistoryQueryKey } from "@workspace/api-client-react";
+import { Play, Settings2, SlidersHorizontal, Settings, Mic } from "lucide-react";
+import { useListVoices, useGenerateSpeech, useGetHistory, getGetHistoryQueryKey, getListVoicesQueryKey } from "@workspace/api-client-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
@@ -16,6 +19,8 @@ import { AudioPlayer } from "@/components/AudioPlayer";
 export default function Home() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const [, setLocation] = useLocation();
 
   const [text, setText] = useState("");
   const [voiceId, setVoiceId] = useState("");
@@ -24,10 +29,37 @@ export default function Home() {
   const [style, setStyle] = useState(0);
   const [useSpeakerBoost, setUseSpeakerBoost] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [totalChars, setTotalChars] = useState(0);
+  const [hasApiKey, setHasApiKey] = useState(false);
 
-  const { data: voices = [], isLoading: isLoadingVoices } = useListVoices({}, { query: { enabled: true } });
-  const { data: history = [], isLoading: isLoadingHistory } = useGetHistory({}, { query: { enabled: true } });
-  
+  useEffect(() => {
+    if (!user) return;
+
+    const loadUsage = async () => {
+      const [historyResult, settingsResult] = await Promise.all([
+        supabase.from("tts_history").select("character_count"),
+        supabase.from("user_settings").select("elevenlabs_api_key").maybeSingle(),
+      ]);
+
+      if (historyResult.data) {
+        const total = historyResult.data.reduce(
+          (sum, item) => sum + item.character_count,
+          0
+        );
+        setTotalChars(total);
+      }
+
+      if (settingsResult.data) {
+        setHasApiKey(!!settingsResult.data.elevenlabs_api_key);
+      }
+    };
+
+    loadUsage();
+  }, [user]);
+
+  const { data: voices = [], isLoading: isLoadingVoices } = useListVoices({ query: { queryKey: getListVoicesQueryKey(), enabled: hasApiKey } });
+  const { data: history = [], isLoading: isLoadingHistory } = useGetHistory({ query: { queryKey: getGetHistoryQueryKey(), enabled: hasApiKey } });
+
   const generateSpeech = useGenerateSpeech();
 
   const maxChars = 5000;
@@ -64,10 +96,11 @@ export default function Home() {
           toast({ title: "Success", description: "Speech generated successfully!" });
         },
         onError: (err) => {
-          toast({ 
-            title: "Generation failed", 
-            description: err?.error?.error || "Unknown error occurred.", 
-            variant: "destructive" 
+          const message = err?.data?.error || err?.message || "Unknown error occurred.";
+          toast({
+            title: "Generation failed",
+            description: message,
+            variant: "destructive"
           });
         },
       }
@@ -77,22 +110,53 @@ export default function Home() {
   return (
     <div className="min-h-[100dvh] bg-background text-foreground p-6 md:p-10 font-sans selection:bg-primary/30 dark">
       <div className="max-w-6xl mx-auto grid lg:grid-cols-12 gap-10">
-        
+
         {/* Left Column: Controls */}
         <div className="lg:col-span-7 space-y-8">
-          <header>
-            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-              <Mic className="text-primary h-8 w-8" />
-              TTS Studio
-            </h1>
-            <p className="text-muted-foreground mt-2">Professional synthesis control room.</p>
+          <header className="flex items-start justify-between">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+                <Mic className="text-primary h-8 w-8" />
+                AliSpeaks
+              </h1>
+              <p className="text-muted-foreground mt-2">Professional AI text-to-speech synthesis.</p>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="text-xs text-muted-foreground">Characters Used</p>
+                <p className="text-lg font-semibold font-mono">{totalChars.toLocaleString()}</p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setLocation("/settings")}
+                title="Settings"
+              >
+                <Settings className="h-5 w-5" />
+              </Button>
+            </div>
           </header>
+
+          {!hasApiKey && (
+            <div className="bg-muted/50 border border-border rounded-lg p-4 text-sm">
+              <p className="text-muted-foreground">
+                Please add your ElevenLabs API key in{" "}
+                <button
+                  onClick={() => setLocation("/settings")}
+                  className="text-primary underline underline-offset-2"
+                >
+                  Settings
+                </button>{" "}
+                to start generating speech.
+              </p>
+            </div>
+          )}
 
           <div className="space-y-4">
             <div className="flex justify-between items-end">
               <Label className="text-sm font-medium uppercase tracking-wider text-muted-foreground">Voice Selection</Label>
             </div>
-            <Select value={voiceId} onValueChange={setVoiceId} disabled={isLoadingVoices}>
+            <Select value={voiceId} onValueChange={setVoiceId} disabled={isLoadingVoices || !hasApiKey}>
               <SelectTrigger className="w-full h-12 bg-card border-border">
                 <SelectValue placeholder={isLoadingVoices ? "Loading voices..." : "Select a voice"} />
               </SelectTrigger>
@@ -171,11 +235,11 @@ export default function Home() {
             </CollapsibleContent>
           </Collapsible>
 
-          <Button 
-            size="lg" 
-            className="w-full h-14 text-lg font-medium" 
+          <Button
+            size="lg"
+            className="w-full h-14 text-lg font-medium"
             onClick={handleGenerate}
-            disabled={generateSpeech.isPending || !text.trim() || !voiceId || isOverLimit}
+            disabled={generateSpeech.isPending || !text.trim() || !voiceId || isOverLimit || !hasApiKey}
           >
             {generateSpeech.isPending ? (
               <span className="flex items-center gap-2">

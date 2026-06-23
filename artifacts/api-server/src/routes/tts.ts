@@ -1,39 +1,28 @@
 import { Router, type IRouter } from "express";
-import { randomUUID } from "crypto";
 import {
   ListVoicesResponse,
   GenerateSpeechBody,
   GenerateSpeechResponse,
   GetHistoryResponse,
 } from "@workspace/api-zod";
+import { supabase, getUserFromToken, getUserApiKey } from "../lib/supabase";
 
 const router: IRouter = Router();
 
 const ELEVENLABS_BASE_URL = "https://api.elevenlabs.io";
 const MODEL_ID = "eleven_multilingual_v2";
-
-function getApiKey(): string | undefined {
-  return process.env.ELEVENLABS_API_KEY;
-}
-
-interface HistoryEntry {
-  id: string;
-  text: string;
-  voice_id: string;
-  voice_name: string;
-  audio_base64: string | null;
-  created_at: string;
-  character_count: number;
-}
-
-const historyStore: HistoryEntry[] = [];
-const MAX_HISTORY = 20;
 const voiceNameCache = new Map<string, string>();
 
 router.get("/voices", async (req, res): Promise<void> => {
-  const apiKey = getApiKey();
+  const user = await getUserFromToken(req.headers.authorization);
+  if (!user) {
+    res.status(401).json({ error: "Unauthorized. Please sign in." });
+    return;
+  }
+
+  const apiKey = await getUserApiKey(user.id);
   if (!apiKey) {
-    res.status(500).json({ error: "ELEVENLABS_API_KEY is not configured." });
+    res.status(400).json({ error: "ElevenLabs API key not configured. Please add it in Settings." });
     return;
   }
 
@@ -73,15 +62,21 @@ router.get("/voices", async (req, res): Promise<void> => {
 });
 
 router.post("/tts", async (req, res): Promise<void> => {
+  const user = await getUserFromToken(req.headers.authorization);
+  if (!user) {
+    res.status(401).json({ error: "Unauthorized. Please sign in." });
+    return;
+  }
+
   const parsed = GenerateSpeechBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
 
-  const apiKey = getApiKey();
+  const apiKey = await getUserApiKey(user.id);
   if (!apiKey) {
-    res.status(500).json({ error: "ELEVENLABS_API_KEY is not configured." });
+    res.status(400).json({ error: "ElevenLabs API key not configured. Please add it in Settings." });
     return;
   }
 
@@ -131,33 +126,67 @@ router.post("/tts", async (req, res): Promise<void> => {
   const audioBuffer = await response.arrayBuffer();
   const audio_base64 = Buffer.from(audioBuffer).toString("base64");
   const content_type = response.headers.get("content-type") ?? "audio/mpeg";
+  const character_count = text.length;
 
-  const entry: HistoryEntry = {
-    id: randomUUID(),
-    text,
-    voice_id,
-    voice_name: voiceNameCache.get(voice_id) ?? voice_id,
-    audio_base64,
-    created_at: new Date().toISOString(),
-    character_count: text.length,
-  };
+  const voice_name = voiceNameCache.get(voice_id) ?? voice_id;
 
-  historyStore.unshift(entry);
-  if (historyStore.length > MAX_HISTORY) {
-    historyStore.splice(MAX_HISTORY);
+  const { data: historyEntry, error: insertError } = await supabase
+    .from("tts_history")
+    .insert({
+      user_id: user.id,
+      text,
+      voice_id,
+      voice_name,
+      character_count,
+      audio_base64,
+    })
+    .select("id, created_at")
+    .single();
+
+  if (insertError) {
+    req.log.error({ error: insertError }, "Failed to save TTS history");
   }
 
   res.json(
     GenerateSpeechResponse.parse({
       audio_base64,
       content_type,
-      character_count: text.length,
+      character_count,
     })
   );
 });
 
-router.get("/history", (_req, res): void => {
-  res.json(GetHistoryResponse.parse(historyStore));
+router.get("/history", async (req, res): Promise<void> => {
+  const user = await getUserFromToken(req.headers.authorization);
+  if (!user) {
+    res.status(401).json({ error: "Unauthorized. Please sign in." });
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from("tts_history")
+    .select("id, text, voice_id, voice_name, audio_base64, created_at, character_count")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (error) {
+    req.log.error({ error }, "Failed to fetch history");
+    res.status(500).json({ error: "Failed to fetch history" });
+    return;
+  }
+
+  const history = data.map((item) => ({
+    id: item.id,
+    text: item.text,
+    voice_id: item.voice_id,
+    voice_name: item.voice_name,
+    audio_base64: item.audio_base64,
+    created_at: item.created_at,
+    character_count: item.character_count,
+  }));
+
+  res.json(GetHistoryResponse.parse(history));
 });
 
 export default router;

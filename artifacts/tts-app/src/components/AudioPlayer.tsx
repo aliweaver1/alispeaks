@@ -19,6 +19,9 @@ export function AudioPlayer({ base64Audio, contentType, autoPlay = false, filena
   const blobUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
+    let audio: HTMLAudioElement | null = null;
+    let blobUrl: string | null = null;
+
     try {
       const binaryString = window.atob(base64Audio);
       const len = binaryString.length;
@@ -28,17 +31,18 @@ export function AudioPlayer({ base64Audio, contentType, autoPlay = false, filena
       }
       const blob = new Blob([bytes], { type: contentType });
       const url = URL.createObjectURL(blob);
+      blobUrl = url;
       blobUrlRef.current = url;
 
-      const audio = new Audio(url);
+      audio = new Audio(url);
       audioRef.current = audio;
 
       audio.addEventListener("loadedmetadata", () => {
-        setDuration(audio.duration);
+        if (audio) setDuration(audio.duration);
       });
 
       audio.addEventListener("timeupdate", () => {
-        setProgress(audio.currentTime);
+        if (audio) setProgress(audio.currentTime);
       });
 
       audio.addEventListener("ended", () => {
@@ -49,16 +53,21 @@ export function AudioPlayer({ base64Audio, contentType, autoPlay = false, filena
       if (autoPlay) {
         audio.play().then(() => setIsPlaying(true)).catch(console.error);
       }
-
-      return () => {
-        audio.pause();
-        URL.revokeObjectURL(url);
-        blobUrlRef.current = null;
-        audioRef.current = null;
-      };
     } catch (err) {
       console.error("Failed to parse audio base64", err);
+      return;
     }
+
+    return () => {
+      if (audio) {
+        audio.pause();
+      }
+      if (blobUrl) {
+        URL.revokeObjectURL(blobUrl);
+      }
+      blobUrlRef.current = null;
+      audioRef.current = null;
+    };
   }, [base64Audio, contentType, autoPlay]);
 
   const togglePlay = () => {
