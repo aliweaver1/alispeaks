@@ -7,6 +7,10 @@ interface HistoryListProps {
   isLoading: boolean;
 }
 
+function sanitize(name: string): string {
+  return name.replace(/[^a-z0-9_\-]/gi, "_").toLowerCase();
+}
+
 export function HistoryList({ items, isLoading }: HistoryListProps) {
   if (isLoading) {
     return (
@@ -29,34 +33,40 @@ export function HistoryList({ items, isLoading }: HistoryListProps) {
 
   return (
     <div className="space-y-6">
-      {items.map((item) => (
-        <div key={item.id} className="bg-card rounded-lg border border-border overflow-hidden">
-          <div className="p-4 border-b border-border/50 flex justify-between items-start gap-4">
-            <div>
-              <h4 className="font-medium text-sm text-foreground">{item.voice_name}</h4>
-              <p className="text-xs text-muted-foreground mt-1 font-mono">
-                {format(new Date(item.created_at), "MMM d, yyyy • HH:mm:ss")}
-              </p>
-            </div>
-            <div className="text-xs text-muted-foreground font-mono bg-muted/50 px-2 py-1 rounded">
-              {item.character_count} chars
-            </div>
-          </div>
-          
-          <div className="p-4 bg-muted/10 text-sm text-foreground/80 leading-relaxed max-h-32 overflow-y-auto">
-            {item.text}
-          </div>
+      {items.map((item) => {
+        const ts = format(new Date(item.created_at), "yyyyMMdd_HHmmss");
+        const filename = `${sanitize(item.voice_name)}_${ts}.mp3`;
 
-          {item.audio_base64 && (
-            <div className="p-4 border-t border-border/50">
-              <AudioPlayer 
-                base64Audio={item.audio_base64} 
-                contentType="audio/mpeg" 
-              />
+        return (
+          <div key={item.id} className="bg-card rounded-lg border border-border overflow-hidden">
+            <div className="p-4 border-b border-border/50 flex justify-between items-start gap-4">
+              <div>
+                <h4 className="font-medium text-sm text-foreground">{item.voice_name}</h4>
+                <p className="text-xs text-muted-foreground mt-1 font-mono">
+                  {format(new Date(item.created_at), "MMM d, yyyy • HH:mm:ss")}
+                </p>
+              </div>
+              <div className="text-xs text-muted-foreground font-mono bg-muted/50 px-2 py-1 rounded">
+                {item.character_count} chars
+              </div>
             </div>
-          )}
-        </div>
-      ))}
+
+            <div className="p-4 bg-muted/10 text-sm text-foreground/80 leading-relaxed max-h-32 overflow-y-auto">
+              {item.text}
+            </div>
+
+            {item.audio_base64 && (
+              <div className="p-4 border-t border-border/50">
+                <AudioPlayer
+                  base64Audio={item.audio_base64}
+                  contentType="audio/mpeg"
+                  filename={filename}
+                />
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Play, Pause, Square, Volume2 } from "lucide-react";
+import { Play, Pause, Volume2, Download } from "lucide-react";
 import { Button } from "./ui/button";
 import { Slider } from "./ui/slider";
 import { cn } from "@/lib/utils";
@@ -8,13 +8,15 @@ interface AudioPlayerProps {
   base64Audio: string;
   contentType: string;
   autoPlay?: boolean;
+  filename?: string;
 }
 
-export function AudioPlayer({ base64Audio, contentType, autoPlay = false }: AudioPlayerProps) {
+export function AudioPlayer({ base64Audio, contentType, autoPlay = false, filename = "audio.mp3" }: AudioPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const blobUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     try {
@@ -26,7 +28,8 @@ export function AudioPlayer({ base64Audio, contentType, autoPlay = false }: Audi
       }
       const blob = new Blob([bytes], { type: contentType });
       const url = URL.createObjectURL(blob);
-      
+      blobUrlRef.current = url;
+
       const audio = new Audio(url);
       audioRef.current = audio;
 
@@ -50,6 +53,7 @@ export function AudioPlayer({ base64Audio, contentType, autoPlay = false }: Audi
       return () => {
         audio.pause();
         URL.revokeObjectURL(url);
+        blobUrlRef.current = null;
         audioRef.current = null;
       };
     } catch (err) {
@@ -66,6 +70,14 @@ export function AudioPlayer({ base64Audio, contentType, autoPlay = false }: Audi
       audioRef.current.play();
       setIsPlaying(true);
     }
+  };
+
+  const handleDownload = () => {
+    if (!blobUrlRef.current) return;
+    const a = document.createElement("a");
+    a.href = blobUrlRef.current;
+    a.download = filename;
+    a.click();
   };
 
   const handleSliderChange = (vals: number[]) => {
@@ -87,7 +99,7 @@ export function AudioPlayer({ base64Audio, contentType, autoPlay = false }: Audi
       <Button
         variant="outline"
         size="icon"
-        className={cn("h-12 w-12 rounded-full", isPlaying ? "text-primary border-primary" : "")}
+        className={cn("h-12 w-12 rounded-full shrink-0", isPlaying ? "text-primary border-primary" : "")}
         onClick={togglePlay}
         data-testid="btn-play-audio"
       >
@@ -108,8 +120,17 @@ export function AudioPlayer({ base64Audio, contentType, autoPlay = false }: Audi
         />
       </div>
 
-      <div className="hidden sm:flex items-center gap-2 text-muted-foreground">
-        <Volume2 className="h-4 w-4" />
+      <div className="flex items-center gap-2 text-muted-foreground shrink-0">
+        <Volume2 className="hidden sm:block h-4 w-4" />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          onClick={handleDownload}
+          title="Download MP3"
+        >
+          <Download className="h-4 w-4" />
+        </Button>
       </div>
     </div>
   );
